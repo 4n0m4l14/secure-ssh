@@ -431,6 +431,68 @@ configure_firewall() {
             fi
             ;;
     esac
+    esac
+}
+
+# Configurar Fail2Ban
+configure_fail2ban() {
+    log "INFO" "Configuración de Fail2Ban..."
+    if prompt_confirm "Desea instalar y configurar Fail2Ban para proteger SSH?" "Y"; then
+        if ! command -v fail2ban-client &> /dev/null; then
+            log "INFO" "Fail2Ban no instalado. Procediendo a la instalación..."
+            install_pkg fail2ban
+        fi
+        
+        # Crear jail.local si no existe o añadir configuración sshd
+        JAIL_LOCAL="/etc/fail2ban/jail.local"
+        
+        # Backup si ya existe
+        if [[ -f "$JAIL_LOCAL" ]]; then
+            cp "$JAIL_LOCAL" "${JAIL_LOCAL}.backup.$(date +%Y%m%d_%H%M%S)"
+            log "INFO" "Backup de jail.local creado."
+        else
+            # Crear cabecera si es nuevo
+            echo "[DEFAULT]" > "$JAIL_LOCAL"
+            echo "bantime = 3600" >> "$JAIL_LOCAL"
+            echo "findtime = 600" >> "$JAIL_LOCAL"
+            echo "maxretry = 3" >> "$JAIL_LOCAL"
+            log "INFO" "Archivo $JAIL_LOCAL creado."
+        fi
+
+        # Comprobar si ya existe bloque [sshd]
+        if ! grep -q "^\[sshd\]" "$JAIL_LOCAL"; then
+            echo "" >> "$JAIL_LOCAL"
+            echo "[sshd]" >> "$JAIL_LOCAL"
+            echo "enabled = true" >> "$JAIL_LOCAL"
+            echo "port = $SSH_PORT" >> "$JAIL_LOCAL"
+            echo "filter = sshd" >> "$JAIL_LOCAL"
+            
+             # Ajuste logpath para RHEL/CentOS
+            if [[ "$OS_TYPE" == "rhel" || "$OS_TYPE" == "suse" ]]; then
+                echo "logpath = /var/log/secure" >> "$JAIL_LOCAL"
+            else
+                echo "logpath = /var/log/auth.log" >> "$JAIL_LOCAL"
+            fi
+            
+            echo "maxretry = 3" >> "$JAIL_LOCAL"
+            log "SUCCESS" "Configuración SSH añadida a $JAIL_LOCAL"
+        else
+            log "WARN" "El bloque [sshd] ya existe en $JAIL_LOCAL. Por favor revise manualmente si el puerto $SSH_PORT está configurado."
+        fi
+
+        # Reiniciar servicio
+        log "INFO" "Reiniciando Fail2Ban..."
+        systemctl enable --now fail2ban &>/dev/null || true
+        systemctl restart fail2ban
+        
+        if systemctl is-active --quiet fail2ban; then
+             log "SUCCESS" "Fail2Ban está activo y protegiendo el puerto $SSH_PORT."
+        else
+             log "ERROR" "Fallo al reiniciar Fail2Ban. Verifique los logs (journalctl -u fail2ban)."
+        fi
+    else
+        log "INFO" "Fail2Ban omitido."
+    fi
 }
 
 # Verificación y reinicio
@@ -485,6 +547,7 @@ main() {
     setup_keys
     harden_sshd
     configure_firewall
+    configure_fail2ban
     finalize_changes
     
     log "SUCCESS" "Script finalizado."

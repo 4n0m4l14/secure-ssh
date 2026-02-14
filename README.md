@@ -13,6 +13,7 @@ A robust, interactive Bash script to secure your SSH server on Linux systems. Th
 - **KEY AUTHENTICATION**:
     - Guided setup for SSH keys (Import from file, Paste directly, or Generate new).
     - Disables password authentication to prevent brute-force attacks.
+- **FAIL2BAN SUPPORT**: Optionally installs and configures Fail2Ban to ban IPs after configured failed attempts.
 - **FIREWALL INTEGRATION**: Automatically configures `UFW` to allow the new SSH port and deny the old one.
 - **SAFETY NET**:
     - Validates configuration syntax before restarting the service.
