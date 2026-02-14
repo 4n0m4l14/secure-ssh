@@ -260,20 +260,97 @@ harden_sshd() {
     log "SUCCESS" "Configuración generada en ${SSHD_CONFIG}.temp"
 }
 
-# Configurar Firewall
-configure_firewall() {
-    log "INFO" "Configuración del Firewall (UFW)..."
+# Variables Globales
+OS_TYPE=""
+PKG_MANAGER=""
+
+# Detectar OS y Gestor de Paquetes
+detect_os() {
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        case "$ID" in
+            debian|ubuntu|linuxmint|kali|pop)
+                OS_TYPE="debian"
+                PKG_MANAGER="apt-get"
+                ;;
+            centos|rhel|fedora|rocky|almalinux)
+                OS_TYPE="rhel"
+                if command -v dnf &> /dev/null; then
+                    PKG_MANAGER="dnf"
+                else
+                    PKG_MANAGER="yum"
+                fi
+                ;;
+            arch|manjaro|endeavouros)
+                OS_TYPE="arch"
+                PKG_MANAGER="pacman"
+                ;;
+            opensuse*|sles)
+                OS_TYPE="suse"
+                PKG_MANAGER="zypper"
+                ;;
+            *)
+                OS_TYPE="unknown"
+                log "WARN" "Sistema operativo no reconocido automáticamente ($ID). Se asumirá compatibilidad genérica."
+                ;;
+        esac
+        log "INFO" "Sistema detectado: $ID ($OS_TYPE). Gestor de paquetes: $PKG_MANAGER"
+    else
+        log "ERROR" "No se puede detectar el sistema operativo (/etc/os-release no encontrado)."
+        exit 1
+    fi
+}
+
+# Instalar paqutes de forma agnóstica
+install_pkg() {
+    local package=$1
+    log "INFO" "Intentando instalar paquete: $package..."
+    
+    if [[ -z "$PKG_MANAGER" ]]; then
+         log "WARN" "No hay gestor de paquetes detectado. Intente instalar '$package' manualmente."
+         return 1
+    fi
+
+    case "$OS_TYPE" in
+        debian)
+            apt-get update && apt-get install -y "$package"
+            ;;
+        rhel)
+            $PKG_MANAGER install -y "$package"
+            ;;
+        arch)
+            pacman -Syu --noconfirm "$package"
+            ;;
+        suse)
+            zypper install -y "$package"
+            ;;
+        *)
+            log "ERROR" "No se sabe cómo instalar en este OS."
+            return 1
+            ;;
+    esac
+}
+
+# Configurar Firewall (UFW - Debian/Ubuntu/Arch)
+configure_firewall_ufw() {
+    log "INFO" "Configurando UFW..."
     
     if ! command -v ufw &> /dev/null; then
-        log "WARN" "UFW no está instalado. Instalándolo..."
-        apt-get update && apt-get install -y ufw
+        log "WARN" "UFW no está instalado."
+        if prompt_confirm "Desea instalar UFW?" "Y"; then
+            install_pkg ufw
+        else
+            return
+        fi
     fi
+
+    # Asegurar que UFW esté activo en systemd si corresponde, pero no habilitarlo aún
+    systemctl enable --now ufw &> /dev/null || true
 
     if prompt_confirm "Desea configurar UFW para permitir el puerto $SSH_PORT?" "Y"; then
         ufw allow "$SSH_PORT/tcp"
         log "SUCCESS" "Regla añadida para puerto $SSH_PORT/tcp"
         
-        # Si el puerto no es 22, preguntar si bloquear el 22
         if [[ "$SSH_PORT" != "22" ]]; then
             if prompt_confirm "Desea cerrar el puerto 22 (puerto por defecto)?" "Y"; then
                 ufw delete allow 22/tcp
@@ -286,6 +363,74 @@ configure_firewall() {
             log "SUCCESS" "Firewall habilitado."
         fi
     fi
+}
+
+# Configurar Firewall (Firewalld - RHEL/CentOS/Fedora/Suse)
+configure_firewall_firewalld() {
+    log "INFO" "Configurando Firewalld..."
+
+    if ! command -v firewall-cmd &> /dev/null; then
+        log "WARN" "Firewalld no está instalado."
+        if prompt_confirm "Desea instalar firewalld?" "Y"; then
+            install_pkg firewalld
+        else
+            return
+        fi
+    fi
+
+    # Asegurar que firewalld esté corriendo
+    systemctl enable --now firewalld
+    
+    if prompt_confirm "Desea configurar firewalld para permitir el puerto $SSH_PORT?" "Y"; then
+        # Añadir puerto a la zona pública permanentemente
+        firewall-cmd --permanent --zone=public --add-port="$SSH_PORT/tcp"
+        log "SUCCESS" "Regla añadida para puerto $SSH_PORT/tcp (permanente)."
+        
+        # Si el puerto no es 22, quitar el servicio ssh predeterminado (que usa el 22) si se desea
+        if [[ "$SSH_PORT" != "22" ]]; then
+            if prompt_confirm "Desea cerrar el puerto 22 (servicio ssh por defecto)?" "Y"; then
+                firewall-cmd --permanent --zone=public --remove-service=ssh
+                log "INFO" "Servicio ssh (puerto 22) eliminado de la zona pública."
+            fi
+        fi
+
+        firewall-cmd --reload
+        log "SUCCESS" "Firewalld recargado."
+    fi
+}
+
+# Configurar Firewall Wrapper
+configure_firewall() {
+    log "INFO" "Configuración del Firewall..."
+
+    case "$OS_TYPE" in
+        debian|ubuntu|linuxmint|kali|pop)
+            # Preferencia por UFW en Debian-based
+            configure_firewall_ufw
+            ;;
+        arch|manjaro)
+            # Arch users might use either, usually ufw is easier for scripts
+             if command -v firewall-cmd &> /dev/null && ! command -v ufw &> /dev/null; then
+                 configure_firewall_firewalld
+             else
+                 configure_firewall_ufw
+             fi
+            ;;
+        rhel|centos|fedora|rocky|almalinux|suse|opensuse*)
+            # Preferencia por Firewalld en RHEL/SUSE
+            configure_firewall_firewalld
+            ;;
+        *)
+            log "WARN" "Sistema $OS_TYPE: No se detectó una preferencia clara de firewall."
+            if command -v ufw &> /dev/null; then
+                 configure_firewall_ufw
+            elif command -v firewall-cmd &> /dev/null; then
+                 configure_firewall_firewalld
+            else
+                log "ERROR" "No se encontró ni ufw ni firewalld soportado para autoconfiguración."
+            fi
+            ;;
+    esac
 }
 
 # Verificación y reinicio
@@ -332,6 +477,7 @@ main() {
     check_root
     
     log "INFO" "Iniciando proceso de configuración..."
+    detect_os
     backup_config
     
     configure_port

@@ -23,6 +23,17 @@ A robust, interactive Bash script to secure your SSH server on Linux systems. Th
 - A Linux server (Debian/Ubuntu based systems recommended, as it uses `apt` and `ufw`).
 - Root privileges (run with `sudo`).
 
+## Supported Systems 🌍
+
+The script automatically detects the operating system and adjusts commands (package manager, firewall) accordingly.
+
+| Family | Distributions (Tested/Supported) | Package Manager | Firewall |
+| :--- | :--- | :--- | :--- |
+| **Debian** | Debian, Ubuntu, Linux Mint, Kali, Pop!_OS | `apt` | `ufw` |
+| **RHEL** | RHEL, CentOS, Fedora, Rocky, AlmaLinux | `dnf` / `yum` | `firewalld` |
+| **Arch** | Arch Linux, Manjaro, EndeavourOS | `pacman` | `ufw` (preferred) / `firewalld` |
+| **SUSE** | openSUSE (Leap/Tumbleweed), SLES | `zypper` | `firewalld` |
+
 ## Usage 🚀
 
 1.  **Clone the repository:**
