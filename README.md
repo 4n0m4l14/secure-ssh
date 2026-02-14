@@ -1,8 +1,8 @@
-# Secure SSH Script 🛡️
+# Secure SSH Script 
 
 A robust, interactive Bash script to secure your SSH server on Linux systems. This tool guides you step-by-step through industry-standard hardening practices, making it easy to protect your server from unauthorized access and automated attacks.
 
-## Features ✨
+## Features 
 
 - **INTERACTIVE SETUP**: logic that asks you for every important decision.
 - **AUTOMATIC BACKUP**: Creates timestamped backups of your `sshd_config` before any changes.
@@ -23,7 +23,7 @@ A robust, interactive Bash script to secure your SSH server on Linux systems. Th
 - A Linux server (Debian/Ubuntu based systems recommended, as it uses `apt` and `ufw`).
 - Root privileges (run with `sudo`).
 
-## Supported Systems 🌍
+## Supported Systems 
 
 The script automatically detects the operating system and adjusts commands (package manager, firewall) accordingly.
 
@@ -34,7 +34,7 @@ The script automatically detects the operating system and adjusts commands (pack
 | **Arch** | Arch Linux, Manjaro, EndeavourOS | `pacman` | `ufw` (preferred) / `firewalld` |
 | **SUSE** | openSUSE (Leap/Tumbleweed), SLES | `zypper` | `firewalld` |
 
-## Usage 🚀
+## Usage 
 
 1.  **Clone the repository:**
     ```bash
@@ -65,7 +65,7 @@ The script automatically detects the operating system and adjusts commands (pack
 - `X11Forwarding`: Disabled.
 - `AllowUsers`: Restricts SSH access to the specific configured user.
 
-## Disclaimer ⚠️
+## Disclaimer 
 
 This script modifies core system configuration files (`/etc/ssh/sshd_config`) and firewall rules. While it includes safety checks and backup mechanisms, **always ensure you have a way to access your server (e.g., via a cloud provider's web console) in case of emergency.**
 
